@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>神経衰弱ゲーム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c;
+            color: #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .container {
+            max-width: 90%;
+            width: 100%;
+        }
+        .game-board {
+            display: grid;
+            gap: 0.5rem;
+            grid-template-columns: repeat(4, 1fr);
+            max-width: 400px; /* 4x4 grid adjustment */
+            margin: 0 auto;
+        }
+        .card {
+            background-color: #3b4556;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            position: relative;
+            transform-style: preserve-3d;
+        }
+        .card.is-flipped {
+            transform: rotateY(180deg);
+        }
+        .card.is-matched {
+            cursor: default;
+        }
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+        }
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.5rem;
+        }
+        .card-front {
+            background-color: #4a5568;
+            transform: rotateY(180deg);
+        }
+        .card-back {
+            background-color: #3b4556;
+            background-image: radial-gradient(#6366f1 2px, transparent 2px);
+            background-size: 16px 16px;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 p-8">
+    <div class="container mx-auto text-center">
+        <h1 class="text-4xl font-bold mb-4">神経衰弱ゲーム</h1>
+        <p class="text-xl mb-6" id="status-message">カードを2枚めくってください。</p>
+        <div class="game-board grid grid-cols-4 gap-2" id="game-board"></div>
+        <button class="mt-8 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full shadow-lg transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-indigo-500" id="reset-button">リセット</button>
+    </div>
+
+    <script>
+        // 4x4グリッド用にシンボルを8種類に減らしました
+        const symbols = ['🍎', '🍌', '🍒', '🍇', '🍉', '🍓', '🍑', '🍋'];
+        let cards = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let lockBoard = false;
+
+        const gameBoard = document.getElementById('game-board');
+        const statusMessage = document.getElementById('status-message');
+        const resetButton = document.getElementById('reset-button');
+
+        // ゲームボードを初期化する
+        function initializeBoard() {
+            cards = [...symbols, ...symbols].sort(() => 0.5 - Math.random());
+            gameBoard.innerHTML = '';
+            flippedCards = [];
+            matchedPairs = 0;
+            lockBoard = false;
+            statusMessage.textContent = 'カードを2枚めくってください。';
+
+            cards.forEach((symbol, index) => {
+                const cardElement = document.createElement('div');
+                cardElement.classList.add('card', 'rounded-lg', 'shadow-md', 'relative');
+                cardElement.dataset.symbol = symbol;
+                cardElement.dataset.index = index;
+
+                const cardInner = document.createElement('div');
+                cardInner.classList.add('card-inner');
+
+                const cardFront = document.createElement('div');
+                cardFront.classList.add('card-face', 'card-front', 'bg-slate-600', 'flex', 'items-center', 'justify-center', 'text-4xl');
+                cardFront.textContent = symbol;
+
+                const cardBack = document.createElement('div');
+                cardBack.classList.add('card-face', 'card-back', 'bg-slate-700');
+
+                cardInner.appendChild(cardFront);
+                cardInner.appendChild(cardBack);
+                cardElement.appendChild(cardInner);
+                
+                cardElement.addEventListener('click', flipCard);
+                gameBoard.appendChild(cardElement);
+            });
+        }
+
+        // カードをめくる
+        function flipCard(event) {
+            const clickedCard = event.currentTarget;
+            if (lockBoard || clickedCard.classList.contains('is-flipped') || clickedCard.classList.contains('is-matched')) {
+                return;
+            }
+
+            clickedCard.classList.add('is-flipped');
+            flippedCards.push(clickedCard);
+
+            if (flippedCards.length === 2) {
+                checkForMatch();
+            }
+        }
+
+        // ペアになっているか確認する
+        function checkForMatch() {
+            lockBoard = true;
+            const [card1, card2] = flippedCards;
+            const isMatch = card1.dataset.symbol === card2.dataset.symbol;
+
+            if (isMatch) {
+                // 正解の場合はカードをそのままにする
+                card1.classList.add('is-matched');
+                card2.classList.add('is-matched');
+                card1.removeEventListener('click', flipCard);
+                card2.removeEventListener('click', flipCard);
+                matchedPairs++;
+
+                if (matchedPairs === symbols.length) {
+                    statusMessage.textContent = 'おめでとうございます！ゲームクリアです！';
+                }
+                resetBoard();
+            } else {
+                // 不正解の場合はカードを元に戻す
+                unflipCards();
+            }
+        }
+
+        // ペアにならなかったカードを元に戻す
+        function unflipCards() {
+            setTimeout(() => {
+                flippedCards.forEach(card => card.classList.remove('is-flipped'));
+                resetBoard();
+            }, 1000);
+        }
+
+        // ボードの状態をリセットする
+        function resetBoard() {
+            [flippedCards, lockBoard] = [[], false];
+        }
+
+        // リセットボタンのイベントリスナー
+        resetButton.addEventListener('click', initializeBoard);
+
+        // ページ読み込み時にゲームを開始
+        window.onload = initializeBoard;
+    </script>
+</body>
+</html>
